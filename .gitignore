@@ -1,0 +1,40 @@
+# ---- 上游材料：不要提交 ----
+# 上游的 zip / apk / deb 一律不入库（MIT 允许重分发，但正确做法是按 tag 下载）
+*.zip
+*.apk
+*.img
+*.tar.gz
+*.7z
+
+# ---- 本地产物 / 临时 ----
+# 注意：*.patched / *.fixed 是「打补丁后可直接覆盖」的成品文件，
+# 它们是仓库的一部分（补丁因版本漂移打不上时的兜底），必须入库。
+# 下面只忽略真正的一次性中间物。
+*.orig
+*.upstream
+*.bak
+*.backup
+*.orig-backup
+*.log
+_download/
+staging/
+output/
+/tmp/
+
+# ---- 编辑器 / 系统 ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ---- 敏感信息（绝不要提交）----
+# DSH 的凭据文件：含 cookie 签名密钥与 API key refs
+.credentials.yaml
+*.keybox
+keybox.xml
+*.pem
+
+# ---- Node ----
+node_modules/
+npm-debug.log*

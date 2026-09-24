@@ -1,0 +1,51 @@
+diff --git a/node_modules/@deepseek-ai/node-addon-system/lib/flock.js b/node_modules/@deepseek-ai/node-addon-system/lib/flock.js
+index bf2a1b0..13097c1 100644
+--- a/node_modules/@deepseek-ai/node-addon-system/lib/flock.js
++++ b/node_modules/@deepseek-ai/node-addon-system/lib/flock.js
+@@ -7,6 +7,46 @@ function loadBinding() {
+     if (binding)
+         return binding;
+     const { platform, arch } = process;
++    // ─────────────────────────────────────────────────────────────────────
++    // 【Android / Termux 适配补丁】本段为新增分支。
++    //
++    // 上游只允许 linux / darwin：
++    //   if (platform !== 'linux' && platform !== 'darwin') throw ... `flock is not supported on ${platform}-${arch}`
++    // 但 Termux 里 Node 是 Android 目标构建，`process.platform === 'android'`，
++    // 于是每一轮会话都直接挂在 `flock is not supported on android-arm64`。
++    // 另外它依赖的预编译包 @deepseek-ai/node-addon-system-<platform>-<arch>
++    // 也没有 android 版本；而且 Node 走的是 Bionic libc，
++    // `process.report.getReport().header.glibcVersionRuntime` 为 undefined，
++    // 即便放开白名单也会去 require 不存在的 musl/system.node。
++    //
++    // 这里改用 dsh 已内置的 koffi（含 @koromix/koffi-android-arm64 预编译产物）
++    // 直接调用 Bionic libc 的 flock(2)，保持与原生实现相同的非阻塞互斥语义：
++    //   成功 -> report(0)；被占用 -> report(EAGAIN/EWOULDBLOCK 的正 errno)。
++    // 调用方 dsh-session-persistence-jsonl 的 isLockContention() 会把后者
++    // 正确映射为 SessionAlreadyOwnedError。
++    // ─────────────────────────────────────────────────────────────────────
++    if (platform === 'android') {
++        const require = createRequire(import.meta.url);
++        const koffi = require('koffi');
++        const libc = koffi.load('libc.so');
++        const flock = libc.func('int flock(int fd, int op)');
++        const LOCK_EX = 2;
++        const LOCK_NB = 4;
++        binding = {
++            tryLock(fd, report) {
++                let rc;
++                try {
++                    rc = flock(fd, LOCK_EX | LOCK_NB);
++                }
++                catch (error) {
++                    // 让调用方看到真实的加载/符号错误，而不是伪装成锁竞争
++                    throw error;
++                }
++                report(rc === 0 ? 0 : koffi.errno());
++            },
++        };
++        return binding;
++    }
+     if (platform !== 'linux' && platform !== 'darwin') {
+         throw Object.assign(new Error(`flock is not supported on ${platform}-${arch}`), {
+             code: 'ERR_FLOCK_UNSUPPORTED_PLATFORM',

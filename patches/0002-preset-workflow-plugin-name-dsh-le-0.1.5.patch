@@ -1,0 +1,31 @@
+# =============================================================================
+# 0002 — preset 的 workflow 插件名：**仅 dsh <= 0.1.5-rc.3 需要**
+#
+# ⚠️ 这不是上游 bug，是**版本适配**。不要把它当 PR 提给上游。
+#
+#   dsh <= 0.1.5-rc.3  ->  @deepseek-ai/dsh-workflow-worker-thread
+#   dsh >= 0.1.6-alpha.1 ->  @deepseek-ai/dsh-workflow-ptc      (上游 HEAD 用的就是这个，正确)
+#
+# 改名方向是 worker-thread -> ptc，发生在 0.1.6-alpha.1 边界。
+# 证据链：D:/OnePlus/mobile-use/pr/FINDINGS-2026-09-24-version-floor.md
+#
+# 🚨 在 dsh >= 0.1.6 上打这个补丁会把预设**改坏**。
+#    apply-all.sh 会自动探测 dsh 版本并跳过；手工打请先确认版本。
+#    设备升级 dsh 到 >= 0.1.6 后，必须撤销本补丁（把名字改回 -ptc）。
+#
+# 目标文件：preset/mobile-use/agent.cordis.yml  (upstream blob 993004c76b98, 16348 B, LF)
+# =============================================================================
+
+diff --git a/preset/mobile-use/agent.cordis.yml b/preset/mobile-use/agent.cordis.yml
+index 993004c..e15a5e8 100644
+--- a/preset/mobile-use/agent.cordis.yml
++++ b/preset/mobile-use/agent.cordis.yml
+@@ -235,7 +235,7 @@
+         maxDepth: provider-managed
+ 
+     - id: workflow-ptc
+-      name: '@deepseek-ai/dsh-workflow-ptc'
++      name: '@deepseek-ai/dsh-workflow-worker-thread'
+       config:
+         provider: spawn
+ 

@@ -1,0 +1,41 @@
+# 本机 core.autocrlf 是「系统级 true」，会把 LF 写成 CRLF ——
+# 而 shell 脚本一旦变成 CRLF 就会报 `syntax error: unexpected 'in'`。
+# 这里用 .gitattributes 把本仓库钉死成 LF，从此与机器的 autocrlf 设置无关。
+
+# 默认：文本按 LF 入库、按 LF 检出
+* text=auto eol=lf
+
+# 明确必须 LF 的文本类型
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.cjs   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.patch text eol=lf
+*.py    text eol=lf
+LICENSE text eol=lf
+
+# patch 文件里包含 <CR> 会被 git apply 判为"上下文不匹配"，务必不要被任何工具改写
+# （git 对 .patch 后缀不做特殊处理，靠上面的 eol=lf 保证）
+
+# 二进制：不做任何换行转换
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.zip   binary
+*.7z    binary
+*.tar   binary
+*.gz    binary
+*.apk   binary
+*.img   binary
+*.dex   binary
+*.so    binary
+*.node  binary
+*.bin   binary

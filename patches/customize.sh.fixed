@@ -1,0 +1,92 @@
+SKIPUNZIP=0
+
+ui_print "**********************************************"
+ui_print "*     Agent Mobile Sandbox & Tools v3.0      *"
+ui_print "*               作者：酸小明                 *"
+ui_print "**********************************************"
+
+ui_print "- 正在安装纯隐形 LSPosed 跨屏路由与输入法隔离补丁 (v3.0)..."
+pm install -r "$MODPATH/apk/agent_hook.apk" >/dev/null 2>&1
+if [ $? -eq 0 ]; then
+    ui_print "- Hook 补丁安装成功"
+else
+    ui_print "! 警告: APK 安装失败，请检查系统环境"
+fi
+
+# Configure LSPosed scope DB
+#
+# 【本段已修】原版这段 SQL 在 LSPosed / Vector 的新版 schema 上**全部无效**，
+# 而错误被 2>/dev/null 吞掉，ui_print 照样印"配置完成"：
+#
+#   原版写法                                真实 schema（mid 制）
+#   scope(module_pkg_name, ...)             scope(mid, app_pkg_name, user_id)   ← 没有 module_pkg_name 列
+#   modules_state(...)                      该表不存在；启用位在 modules.enabled
+#   modules(module_pkg_name, apk_path)      这条列名恰好一致 -> 能成
+#
+# 后果：modules 表有行、scope 表为空 ⟹ hook 一次都不会跑（跨屏焦点隔离/免软键盘弹窗失效），
+# 但安装日志显示成功。实测环境：Vector 2.2 (API 102) + crDroid 12.12 / Android 16。
+LSP_DB="/data/adb/lspd/config/modules_config.db"
+SQLITE_BIN="$MODPATH/bin/sqlite3"
+chmod 755 "$SQLITE_BIN" 2>/dev/null
+
+if [ -f "$LSP_DB" ] && [ -x "$SQLITE_BIN" ]; then
+    ui_print "- 正在自动配置 LSPosed 模块作用域..."
+    APK_PATH=$(pm path com.agent.mobileuse 2>/dev/null | head -n 1 | cut -d':' -f2)
+    if [ -z "$APK_PATH" ]; then
+        ui_print "! 警告: 取不到 com.agent.mobileuse 的 apk 路径，跳过作用域配置"
+    else
+        # 1) 登记模块（列名与真实 schema 一致）
+        "$SQLITE_BIN" "$LSP_DB" \
+            "INSERT OR REPLACE INTO modules (module_pkg_name, apk_path) VALUES ('com.agent.mobileuse', '$APK_PATH');"
+
+        # 2) 启用 —— 写在 modules.enabled，不是不存在的 modules_state 表
+        "$SQLITE_BIN" "$LSP_DB" \
+            "UPDATE modules SET enabled = 1 WHERE module_pkg_name = 'com.agent.mobileuse';"
+
+        # 3) 作用域必须按 mid（自增主键）写，先查回来
+        MID=$("$SQLITE_BIN" "$LSP_DB" \
+            "SELECT mid FROM modules WHERE module_pkg_name = 'com.agent.mobileuse';" | tr -d '\r')
+        if [ -z "$MID" ]; then
+            ui_print "! 警告: 取不到 mid，作用域未写入"
+        else
+            for APP in android system; do
+                "$SQLITE_BIN" "$LSP_DB" \
+                    "INSERT OR IGNORE INTO scope (mid, app_pkg_name, user_id) VALUES ($MID, '$APP', 0);"
+            done
+
+            # 4) 真校验，不再无条件报成功
+            SCOPED=$("$SQLITE_BIN" "$LSP_DB" "SELECT count(*) FROM scope WHERE mid = $MID;" | tr -d '\r')
+            if [ "${SCOPED:-0}" -ge 2 ]; then
+                ui_print "- LSPosed 作用域配置完成 (mid=$MID, scope=$SCOPED 条): $APK_PATH"
+            else
+                ui_print "! 警告: 作用域只写入 $SCOPED 条（期望 >=2），请到管理器里手工确认"
+            fi
+        fi
+
+        # 5) 配置库完整性自检
+        CK=$("$SQLITE_BIN" "$LSP_DB" "PRAGMA integrity_check;" 2>/dev/null | head -n 1 | tr -d '\r')
+        [ "$CK" = "ok" ] || ui_print "! 警告: 配置库完整性检查返回: $CK"
+    fi
+
+    ui_print "- 提示: 作用域含 android(system_server) 级目标，需重启一次才生效"
+fi
+
+ui_print "- 设置可执行权限..."
+set_perm_recursive "$MODPATH" 0 0 0755 0644
+set_perm "$MODPATH/system/bin/vd" 0 0 0755
+set_perm "$MODPATH/bin/run_daemon.sh" 0 0 0755
+set_perm "$MODPATH/bin/vd_server" 0 0 0755
+set_perm "$MODPATH/bin/sqlite3" 0 0 0755
+set_perm "$MODPATH/service.sh" 0 0 0755
+
+# Instant activation without waiting for reboot
+cp -f "$MODPATH/bin/agent_vd.dex" /data/local/tmp/agent_vd.dex
+cp -f "$MODPATH/bin/agent_tools.dex" /data/local/tmp/agent_tools.dex
+cp -f "$MODPATH/bin/run_daemon.sh" /data/local/tmp/run_daemon.sh
+chmod 755 /data/local/tmp/run_daemon.sh
+
+ui_print "**********************************************"
+ui_print "* 安装完成！                                 *"
+ui_print "* 随时在终端执行 vd tree / vd tap / vd type  *"
+ui_print "* 浏览器访问 http://127.0.0.1:3070 查看监控  *"
+ui_print "**********************************************"
